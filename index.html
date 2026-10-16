@@ -40,7 +40,8 @@
   .field{margin-bottom:14px;}
   .field label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:6px;font-weight:600;}
   .field input{width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;background:var(--bg);}
-  .field input:focus{outline:none;border-color:var(--primary-light);}
+  .field select{width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;background:var(--bg);color:var(--ink);}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--primary-light);}
   .btn-primary{width:100%;padding:13px;background:var(--primary);color:#fff;border-radius:10px;font-weight:600;font-size:15px;margin-top:6px;}
   .btn-primary:active{background:var(--primary-light);}
   .btn-primary:disabled{opacity:.5;}
@@ -153,6 +154,34 @@
   .margin-row .mr-meta .pct{font-family:var(--font-mono);font-weight:600;}
   .pct.low{color:var(--danger);}
   .pct.good{color:var(--primary-light);}
+  .seg{display:flex;background:var(--surface-2);border-radius:12px;padding:4px;margin-bottom:14px;}
+  .seg button{flex:1;padding:9px;border-radius:9px;background:none;font-weight:600;font-size:13px;color:var(--ink-soft);}
+  .seg button.active{background:var(--surface);color:var(--primary);box-shadow:0 1px 3px rgba(0,0,0,.1);}
+  .stok-pill{font-size:10px;padding:3px 9px;border-radius:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;flex-shrink:0;}
+  .stok-pill.habis{background:#F6D5D2;color:var(--danger);}
+  .stok-pill.menipis{background:var(--accent-soft);color:#7A5A12;}
+  .stok-pill.aman{background:#D9EBDF;color:var(--primary-light);}
+  .stok-big{font-family:var(--font-mono);font-size:20px;font-weight:600;color:var(--primary);}
+  .mv-line{display:flex;gap:14px;font-size:11.5px;color:var(--ink-soft);margin-top:8px;font-family:var(--font-mono);}
+  .mv-line .plus{color:var(--primary-light);font-weight:600;}
+  .mv-line .minus{color:var(--danger);font-weight:600;}
+  .field select option{color:var(--ink);}
+  .btn-secondary{width:100%;padding:13px;background:var(--surface-2);color:var(--primary);border-radius:10px;font-weight:600;font-size:15px;margin-top:8px;}
+  .nota{background:#fff;color:#000;font-family:var(--font-mono);font-size:12px;line-height:1.5;padding:16px 14px;border-radius:8px;max-width:320px;margin:0 auto 14px;border:1px solid var(--border);}
+  .nota .c{text-align:center;}
+  .nota .b{font-weight:600;}
+  .nota hr{border:none;border-top:1px dashed #000;margin:8px 0;}
+  .nota .r{display:flex;justify-content:space-between;gap:8px;}
+  .nota .it{margin-bottom:4px;}
+  .nota .big{font-size:14px;font-weight:600;}
+  #print-area{display:none;}
+  @media print{
+    html,body{background:#fff !important;height:auto !important;overflow:visible !important;}
+    #app,#toast-root{display:none !important;}
+    #print-area{display:block !important;}
+    #print-area .nota{border:none;border-radius:0;max-width:none;width:100%;margin:0;padding:2mm 3mm;font-size:11px;}
+    @page{margin:0;}
+  }
   .fab{position:absolute;right:18px;bottom:80px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;font-size:26px;box-shadow:0 8px 20px rgba(0,0,0,.25);z-index:15;}
 
   .badge{font-size:10px;padding:2px 8px;border-radius:10px;background:var(--surface-2);color:var(--ink-soft);font-weight:600;}
@@ -195,10 +224,26 @@
   <div id="sheet-root"></div>
   <div id="toast-root"></div>
 </div>
+<div id="print-area"></div>
 
 <script>
 /* ======================= KONFIGURASI ======================= */
-const API_URL = 'https://script.google.com/macros/s/AKfycbwK7l1g2lMSREF01zU0z9Ceto2UzKbhBWqQplTmiQjRB4yYOkGNJLiL0ZKcCLGXsgG5/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwQkO6Ry8nNF92QpyK6p2_I8LhL_hXCIBo8-L8IvlGfig8Povl6PQhwSE8HP1elBfnd/exec';
+
+/* Identitas toko yang tercetak di nota. Ganti sesuai toko Anda. */
+const TOKO = {
+  nama: 'Nama Toko Anda',
+  alamat: 'Alamat toko Anda',
+  telp: '08xx-xxxx-xxxx',
+  footer: 'Terima kasih sudah berbelanja',
+  lebarKertas: '58mm'   // ganti '80mm' jika printer struk Anda 80mm
+};
+
+/* Daftar kategori barang (tampil sebagai dropdown di form barang). Ubah/tambah di sini jika perlu. */
+const KATEGORI = [
+  'Sembako','Bumbu dapur','Minuman','Produk Kebersihan','Makanan Ringan','Perlengkapan RT',
+  'Gas','Obat','Keperluan Bayi','Alat Tulis Kantor','Layanan Digital','Lainnya'
+];
 
 /* ======================= STATE ======================= */
 let state = {
@@ -209,6 +254,10 @@ let state = {
   search: '',
   kategori: 'Semua',
   laporan: null,
+  laporanTab: 'penjualan',
+  laporanStok: null,
+  stokFilter: 'Semua',
+  masuk: [],
   laporanRange: { mulai: '', sampai: '' },
   riwayat: []
 };
@@ -216,6 +265,7 @@ let state = {
 /* ======================= HELPERS ======================= */
 function rupiah(n){ return 'Rp' + Math.round(Number(n)||0).toLocaleString('id-ID'); }
 function el(id){ return document.getElementById(id); }
+function esc(t){ return String(t==null?'':t).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function showToast(msg){
   const root = el('toast-root');
   root.innerHTML = `<div class="toast">${msg}</div>`;
@@ -230,16 +280,16 @@ const demoDB = {
     {Username:'kasir',Password:'kasir123',Nama:'Kasir 1',Role:'kasir'}
   ],
   barang:[
-    {ID:1,Nama:'Indomie Goreng',Kategori:'Makanan',HargaBeli:2500,HargaJual:3000,Stok:48,Satuan:'pcs'},
+    {ID:1,Nama:'Indomie Goreng',Kategori:'Sembako',HargaBeli:2500,HargaJual:3000,Stok:48,Satuan:'pcs'},
     {ID:2,Nama:'Aqua 600ml',Kategori:'Minuman',HargaBeli:2800,HargaJual:4000,Stok:30,Satuan:'btl'},
     {ID:3,Nama:'Teh Botol Sosro',Kategori:'Minuman',HargaBeli:4000,HargaJual:5500,Stok:20,Satuan:'btl'},
     {ID:4,Nama:'Beras 5kg',Kategori:'Sembako',HargaBeli:58000,HargaJual:65000,Stok:12,Satuan:'karung'},
     {ID:5,Nama:'Minyak Goreng 1L',Kategori:'Sembako',HargaBeli:16000,HargaJual:18500,Stok:4,Satuan:'btl'},
     {ID:6,Nama:'Gula Pasir 1kg',Kategori:'Sembako',HargaBeli:14000,HargaJual:16000,Stok:15,Satuan:'kg'},
     {ID:7,Nama:'Kopi Kapal Api',Kategori:'Minuman',HargaBeli:1200,HargaJual:2000,Stok:60,Satuan:'sachet'},
-    {ID:8,Nama:'Sabun Lifebuoy',Kategori:'Kebersihan',HargaBeli:3000,HargaJual:4000,Stok:0,Satuan:'pcs'}
+    {ID:8,Nama:'Sabun Lifebuoy',Kategori:'Produk Kebersihan',HargaBeli:3000,HargaJual:4000,Stok:0,Satuan:'pcs'}
   ],
-  transaksi:[], detail:[]
+  transaksi:[], detail:[], masuk:[]
 };
 (function seedDemo(){
   const d=demoDB; let tid=1, did=1;
@@ -254,6 +304,9 @@ const demoDB = {
     });
     d.transaksi.push({ID:tid,Tanggal:tgl,Kasir:'Kasir 1',TotalItem:items.length,TotalBayar:total,Bayar:total,Kembalian:0});
     tid++;
+  });
+  [[3,1,'Indomie Goreng',40,2500,'Agen Mie Jaya'],[2,2,'Aqua 600ml',24,2800,'Distributor Air'],[1,5,'Minyak Goreng 1L',6,16000,'Toko Grosir Makmur']].forEach(([hari,bid,nm,q,hb,sup],i)=>{
+    d.masuk.push({ID:i+1,Tanggal:new Date(Date.now()-hari*86400000).toISOString(),BarangID:bid,NamaBarang:nm,Qty:q,HargaBeli:hb,Supplier:sup,Catatan:'',Petugas:'Pemilik Toko'});
   });
 })();
 
@@ -278,6 +331,41 @@ function demoApi(action, p){
       const b=d.barang.find(x=>Number(x.ID)===Number(i.id)); if(b) b.Stok=Number(b.Stok)-i.qty;
     });
     return {success:true,transaksiId:id,total,kembalian:p.bayar-total};
+  }
+  if(action==='addBarangMasuk'){
+    const q=Number(p.qty);
+    const b=d.barang.find(x=>Number(x.ID)===Number(p.barangId));
+    if(!b||!(q>0)) return {success:false,message:'Pilih barang dan isi jumlah masuk'};
+    b.Stok=Number(b.Stok)+q;
+    const hb=Number(p.hargaBeli)>0?Number(p.hargaBeli):b.HargaBeli;
+    if(Number(p.hargaBeli)>0) b.HargaBeli=hb;
+    d.masuk.push({ID:nextId(d.masuk),Tanggal:new Date().toISOString(),BarangID:b.ID,NamaBarang:b.Nama,Qty:q,HargaBeli:hb,Supplier:p.supplier||'',Catatan:p.catatan||'',Petugas:p.petugas||''});
+    return {success:true,stokBaru:b.Stok};
+  }
+  if(action==='getBarangMasuk') return {success:true,data:[...d.masuk].reverse()};
+  if(action==='getLaporanStok'){
+    const day=t=>t.slice(0,10);
+    const inR=t=>(!p.mulai||day(t)>=p.mulai)&&(!p.sampai||day(t)<=p.sampai);
+    const after=t=>!!p.sampai&&day(t)>p.sampai;
+    const tgl={}; d.transaksi.forEach(t=>tgl[t.ID]=t.Tanggal);
+    const mv={}; const g=id=>mv[id]||(mv[id]={masuk:0,keluar:0,mS:0,kS:0});
+    d.masuk.forEach(m=>{const o=g(m.BarangID); if(after(m.Tanggal)) o.mS+=m.Qty; else if(inR(m.Tanggal)) o.masuk+=m.Qty;});
+    d.detail.forEach(x=>{const t=tgl[x.TransaksiID]; if(!t) return; const o=g(x.BarangID); if(after(t)) o.kS+=x.Qty; else if(inR(t)) o.keluar+=x.Qty;});
+    const ord={habis:0,menipis:1,aman:2}; let nilai=0,habis=0,menipis=0;
+    const items=d.barang.map(b=>{
+      const o=mv[b.ID]||{masuk:0,keluar:0,mS:0,kS:0};
+      const akhir=Number(b.Stok)-o.mS+o.kS, awal=akhir-o.masuk+o.keluar;
+      const nv=Math.max(akhir,0)*b.HargaBeli; const st=akhir<=0?'habis':(akhir<=5?'menipis':'aman');
+      nilai+=nv; if(st==='habis') habis++; if(st==='menipis') menipis++;
+      return {id:b.ID,nama:b.Nama,kategori:b.Kategori,satuan:b.Satuan,hargaBeli:b.HargaBeli,stokAwal:awal,masuk:o.masuk,keluar:o.keluar,stokAkhir:akhir,nilai:nv,status:st};
+    }).sort((a,b)=>(ord[a.status]-ord[b.status])||a.nama.localeCompare(b.nama));
+    return {success:true,data:{totalNilai:nilai,jumlahBarang:items.length,habis,menipis,items}};
+  }
+  if(action==='getNota'){
+    const t=d.transaksi.find(x=>Number(x.ID)===Number(p.id));
+    if(!t) return {success:false,message:'Transaksi tidak ditemukan'};
+    const items=d.detail.filter(x=>Number(x.TransaksiID)===Number(p.id)).map(x=>({nama:x.NamaBarang,qty:x.Qty,harga:x.HargaSatuan,subtotal:x.Subtotal}));
+    return {success:true,data:{id:t.ID,tanggal:t.Tanggal,kasir:t.Kasir,total:t.TotalBayar,bayar:t.Bayar,kembalian:t.Kembalian,items}};
   }
   if(action==='getTransaksi') return {success:true,data:[...d.transaksi].reverse()};
   if(action==='getLaporan'){
@@ -377,6 +465,7 @@ function navItems(){
     return [
       {id:'kasir', label:'Kasir', icon:'🛒'},
       {id:'barang', label:'Barang', icon:'📦'},
+      {id:'masuk', label:'Masuk', icon:'📥'},
       {id:'laporan', label:'Laporan', icon:'📊'},
       {id:'riwayat', label:'Riwayat', icon:'🧾'}
     ];
@@ -400,10 +489,12 @@ function renderNav(){
 
 function setView(view){
   state.view = view;
-  el('topbar-title').textContent = {kasir:'Kasir', barang:'Barang', laporan:'Laporan', riwayat:'Riwayat'}[view];
+  el('topbar-title').textContent = {kasir:'Kasir', barang:'Barang', masuk:'Barang Masuk', laporan:'Laporan', riwayat:'Riwayat'}[view];
   renderNav();
+  if(el('fab-barang')) el('fab-barang').classList.add('hidden');
   if(view==='kasir') renderKasir();
   if(view==='barang') renderBarang();
+  if(view==='masuk') renderMasuk();
   if(view==='laporan') renderLaporan();
   if(view==='riwayat') renderRiwayat();
 }
@@ -539,14 +630,20 @@ async function finalisasiTransaksi(total){
       bayar
     });
     if(res.success){
+      const nota = {
+        id: res.transaksiId, tanggal: new Date().toISOString(), kasir: state.user.nama,
+        items: state.cart.map(c=>({nama:c.nama, qty:c.qty, harga:c.harga, subtotal:c.qty*c.harga})),
+        total, bayar, kembalian: res.kembalian
+      };
       state.cart.forEach(c=>{
         const b = state.barang.find(x=> String(x.ID)===String(c.id));
         if(b) b.Stok = Number(b.Stok) - c.qty;
       });
       state.cart = [];
-      el('sheet-root').innerHTML = '';
-      showToast(`Transaksi berhasil · Kembalian ${rupiah(res.kembalian)}`);
+      state.laporanStok = null;
       renderKasir();
+      openNotaSheet(nota, 'baru');
+      return;
     } else {
       showToast(res.message || 'Transaksi gagal');
     }
@@ -601,7 +698,16 @@ function openBarangForm(id){
         <div class="sheet-handle"></div>
         <h2>${existing?'Edit Barang':'Tambah Barang'}</h2>
         <div class="field"><label>Nama barang</label><input id="f-nama" value="${existing?existing.Nama:''}"></div>
-        <div class="field"><label>Kategori</label><input id="f-kategori" value="${existing?existing.Kategori||'':''}"></div>
+        <div class="field"><label>Kategori</label>
+          <select id="f-kategori">
+            <option value="">Pilih kategori</option>
+            ${(()=>{
+              const cur = existing ? (existing.Kategori||'') : '';
+              const opts = (cur && !KATEGORI.includes(cur)) ? [...KATEGORI, cur] : KATEGORI;
+              return opts.map(k=>`<option value="${k}" ${k===cur?'selected':''}>${k}</option>`).join('');
+            })()}
+          </select>
+        </div>
         <div class="field-row">
           <div class="field"><label>Harga beli</label><input id="f-hargabeli" inputmode="numeric" value="${existing?existing.HargaBeli:''}"></div>
           <div class="field"><label>Harga jual</label><input id="f-hargajual" inputmode="numeric" value="${existing?existing.HargaJual:''}"></div>
@@ -630,6 +736,7 @@ async function simpanBarang(existing){
     Satuan: el('f-satuan').value.trim()||'pcs'
   };
   if(!payload.Nama){ showToast('Nama barang wajib diisi'); return; }
+  if(!payload.Kategori){ showToast('Pilih kategori barang'); return; }
   const btn = el('save-barang-btn'); btn.disabled=true; btn.textContent='Menyimpan...';
   try{
     const res = existing ? await apiPost('updateBarang',{barang:payload}) : await apiPost('addBarang',{barang:payload});
@@ -654,11 +761,125 @@ async function hapusBarang(id){
   } else showToast(res.message||'Gagal menghapus');
 }
 
+/* ======================= BARANG MASUK VIEW ======================= */
+function renderMasuk(){
+  el('cart-bar').classList.add('hidden');
+  el('content').innerHTML = `
+    <button class="btn-primary" id="masuk-baru" style="margin-top:0;">+ Catat Barang Masuk</button>
+    <div class="section-title">Riwayat Barang Masuk</div>
+    <div id="masuk-list"><div class="empty-state">Memuat riwayat...</div></div>
+  `;
+  el('masuk-baru').addEventListener('click', openMasukForm);
+  muatMasuk();
+}
+
+async function muatMasuk(){
+  try{
+    const res = await apiGet('getBarangMasuk');
+    state.masuk = res.data || [];
+  }catch(err){ showToast('Gagal memuat riwayat'); state.masuk = []; }
+  const box = el('masuk-list'); if(!box) return;
+  const list = state.masuk.slice(0,50);
+  box.innerHTML = list.length===0 ? '<div class="empty-state">Belum ada barang masuk.<br>Tekan tombol di atas untuk mencatat.</div>' : list.map(m=>{
+    const b = state.barang.find(x=> String(x.ID)===String(m.BarangID));
+    const satuan = b ? (b.Satuan||'') : '';
+    return `<div class="card">
+      <div class="row-between" style="gap:10px;">
+        <div style="min-width:0;">
+          <div style="font-weight:600;font-size:14px;">${esc(m.NamaBarang)}</div>
+          <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">${new Date(m.Tanggal).toLocaleString('id-ID')}${m.Supplier?' · '+esc(m.Supplier):''}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;">
+          <div class="mono" style="font-weight:700;color:var(--primary-light);">+${m.Qty} ${esc(satuan)}</div>
+          <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">@ ${rupiah(m.HargaBeli)}</div>
+        </div>
+      </div>
+      ${m.Catatan?`<div style="font-size:12px;color:var(--ink-soft);margin-top:8px;">${esc(m.Catatan)}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function openMasukForm(){
+  if(state.barang.length===0){ showToast('Tambahkan barang dulu di tab Barang'); return; }
+  const sorted = [...state.barang].sort((a,b)=> String(a.Nama).localeCompare(String(b.Nama)));
+  el('sheet-root').innerHTML = `
+    <div class="overlay" id="masuk-overlay">
+      <div class="sheet">
+        <button class="close-sheet" id="close-masuk">✕</button>
+        <div class="sheet-handle"></div>
+        <h2>Catat Barang Masuk</h2>
+        <div class="field"><label>Barang</label>
+          <select id="m-barang">
+            <option value="">Pilih barang</option>
+            ${sorted.map(b=>`<option value="${b.ID}">${esc(b.Nama)} (stok ${b.Stok})</option>`).join('')}
+          </select>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Jumlah masuk</label><input id="m-qty" inputmode="numeric" placeholder="0"></div>
+          <div class="field"><label>Harga beli / satuan</label><input id="m-harga" inputmode="numeric" placeholder="0"></div>
+        </div>
+        <div class="field"><label>Supplier (opsional)</label><input id="m-supplier"></div>
+        <div class="field"><label>Catatan (opsional)</label><input id="m-catatan"></div>
+        <div class="pay-row"><span>Stok setelah masuk</span><span class="val mono" id="m-preview">-</span></div>
+        <div style="font-size:11px;color:var(--ink-soft);margin-bottom:6px;">Harga beli yang diisi akan memperbarui harga beli barang ini untuk perhitungan margin berikutnya.</div>
+        <button class="btn-primary" id="save-masuk-btn">Simpan & Tambah Stok</button>
+      </div>
+    </div>
+  `;
+  const upd = ()=>{
+    const b = state.barang.find(x=> String(x.ID)===el('m-barang').value);
+    const q = Number(el('m-qty').value.replace(/\D/g,''))||0;
+    el('m-preview').textContent = b ? `${Number(b.Stok)} → ${Number(b.Stok)+q} ${b.Satuan||''}` : '-';
+  };
+  el('close-masuk').addEventListener('click', ()=> el('sheet-root').innerHTML='');
+  el('masuk-overlay').addEventListener('click', (e)=>{ if(e.target.id==='masuk-overlay') el('sheet-root').innerHTML=''; });
+  el('m-barang').addEventListener('change', ()=>{
+    const b = state.barang.find(x=> String(x.ID)===el('m-barang').value);
+    el('m-harga').value = b ? (b.HargaBeli||'') : '';
+    upd();
+  });
+  el('m-qty').addEventListener('input', upd);
+  el('save-masuk-btn').addEventListener('click', simpanMasuk);
+}
+
+async function simpanMasuk(){
+  const barangId = el('m-barang').value;
+  const qty = Number(el('m-qty').value.replace(/\D/g,''))||0;
+  const hargaBeli = Number(el('m-harga').value.replace(/\D/g,''))||0;
+  if(!barangId){ showToast('Pilih barang dulu'); return; }
+  if(qty<=0){ showToast('Isi jumlah barang masuk'); return; }
+  const b = state.barang.find(x=> String(x.ID)===barangId);
+  const btn = el('save-masuk-btn'); btn.disabled=true; btn.textContent='Menyimpan...';
+  try{
+    const res = await apiPost('addBarangMasuk',{
+      barangId, qty, hargaBeli,
+      supplier: el('m-supplier').value.trim(),
+      catatan: el('m-catatan').value.trim(),
+      petugas: state.user.nama
+    });
+    if(res.success){
+      const data = await apiGet('getBarang');
+      state.barang = data.data || [];
+      state.laporanStok = null;
+      el('sheet-root').innerHTML = '';
+      showToast(`Stok ${b.Nama} bertambah ${qty}`);
+      renderMasuk();
+    } else showToast(res.message || 'Gagal menyimpan');
+  }catch(err){ showToast('Gagal menghubungi server'); }
+  const again = el('save-masuk-btn');
+  if(again){ again.disabled=false; again.textContent='Simpan & Tambah Stok'; }
+}
+
 /* ======================= LAPORAN VIEW ======================= */
 function renderLaporan(){
   el('cart-bar').classList.add('hidden');
   if(el('fab-barang')) el('fab-barang').classList.add('hidden');
+  const tab = state.laporanTab;
   el('content').innerHTML = `
+    <div class="seg">
+      <button data-tab="penjualan" class="${tab==='penjualan'?'active':''}">Penjualan</button>
+      <button data-tab="stok" class="${tab==='stok'?'active':''}">Stok Produk</button>
+    </div>
     <div class="field-row">
       <div class="field"><label>Dari tanggal</label><input type="date" id="lap-mulai" value="${state.laporanRange.mulai}"></div>
       <div class="field"><label>Sampai tanggal</label><input type="date" id="lap-sampai" value="${state.laporanRange.sampai}"></div>
@@ -666,18 +887,66 @@ function renderLaporan(){
     <button class="btn-primary" id="lap-terapkan">Tampilkan Laporan</button>
     <div id="lap-hasil" style="margin-top:16px;"></div>
   `;
+  el('content').querySelectorAll('.seg button').forEach(b=> b.addEventListener('click', ()=>{
+    state.laporanRange.mulai = el('lap-mulai').value;
+    state.laporanRange.sampai = el('lap-sampai').value;
+    state.laporanTab = b.dataset.tab;
+    renderLaporan();
+  }));
   el('lap-terapkan').addEventListener('click', muatLaporan);
-  if(state.laporan) tampilkanLaporan();
+  if(tab==='stok') muatLaporan();            // stok selalu diambil terbaru
+  else if(state.laporan) tampilkanLaporan();
 }
 
 async function muatLaporan(){
   state.laporanRange.mulai = el('lap-mulai').value;
   state.laporanRange.sampai = el('lap-sampai').value;
-  el('lap-terapkan').textContent = 'Memuat...';
-  const res = await apiGet('getLaporan', state.laporanRange);
-  state.laporan = res.data;
-  el('lap-terapkan').textContent = 'Tampilkan Laporan';
-  tampilkanLaporan();
+  const tab = state.laporanTab;
+  const btn = el('lap-terapkan');
+  btn.textContent = 'Memuat...';
+  try{
+    const res = await apiGet(tab==='stok' ? 'getLaporanStok' : 'getLaporan', state.laporanRange);
+    if(!res.success){ showToast(res.message || 'Gagal memuat laporan'); }
+    else if(tab !== state.laporanTab){ /* tab sudah berganti, abaikan */ }
+    else if(tab==='stok'){ state.laporanStok = res.data; tampilkanLaporanStok(); }
+    else { state.laporan = res.data; tampilkanLaporan(); }
+  }catch(err){ showToast('Gagal menghubungi server'); }
+  if(el('lap-terapkan')) el('lap-terapkan').textContent = 'Tampilkan Laporan';
+}
+
+function tampilkanLaporanStok(){
+  const d = state.laporanStok; if(!d) return;
+  const filters = ['Semua','Habis','Menipis','Aman'];
+  const f = state.stokFilter;
+  const items = d.items.filter(i=> f==='Semua' || i.status===f.toLowerCase());
+  const ada = !!(state.laporanRange.mulai || state.laporanRange.sampai);
+  el('lap-hasil').innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="label">Nilai Persediaan</div><div class="value">${rupiah(d.totalNilai)}</div><div class="sub">stok × harga beli</div></div>
+      <div class="stat-card accent"><div class="label">Jenis Barang</div><div class="value">${d.jumlahBarang}</div><div class="sub">${d.habis} habis · ${d.menipis} menipis</div></div>
+    </div>
+    <div class="chips">${filters.map(k=>`<button class="chip ${k===f?'active':''}" data-f="${k}">${k}</button>`).join('')}</div>
+    ${items.length===0 ? '<div class="empty-state">Tidak ada barang di kategori status ini</div>' : items.map(i=>`
+      <div class="card">
+        <div class="row-between" style="gap:10px;">
+          <div style="min-width:0;">
+            <div style="font-weight:600;font-size:14px;">${esc(i.nama)}</div>
+            <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">${esc(i.kategori||'-')} · Nilai ${rupiah(i.nilai)}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div class="stok-big">${i.stokAkhir}<span style="font-size:11px;color:var(--ink-soft);font-family:var(--font-body);font-weight:500;"> ${esc(i.satuan||'')}</span></div>
+            <span class="stok-pill ${i.status}">${i.status}</span>
+          </div>
+        </div>
+        <div class="mv-line">
+          <span>Awal ${i.stokAwal}</span>
+          <span class="plus">Masuk +${i.masuk}</span>
+          <span class="minus">Keluar −${i.keluar}</span>
+        </div>
+      </div>`).join('')}
+    <div style="font-size:11px;color:var(--ink-soft);margin-top:14px;line-height:1.5;">${ada?'Stok akhir dihitung per akhir periode yang dipilih.':'Tanggal kosong = stok saat ini.'} Menipis = stok 5 atau kurang. Perubahan stok manual lewat Edit Barang tidak tercatat sebagai barang masuk/keluar, jadi bisa membuat angka Awal tidak sama dengan kenyataan.</div>
+  `;
+  el('lap-hasil').querySelectorAll('.chip').forEach(c=> c.addEventListener('click', ()=>{ state.stokFilter=c.dataset.f; tampilkanLaporanStok(); }));
 }
 
 function pct(n){ return Number(n).toFixed(1).replace('.',',')+'%'; }
@@ -731,20 +1000,88 @@ function renderRiwayat(){
 }
 
 async function muatRiwayat(){
-  const res = await apiGet('getTransaksi');
+  let res;
+  try{ res = await apiGet('getTransaksi'); }catch(err){ showToast('Gagal memuat riwayat'); res = {data:[]}; }
   state.riwayat = res.data || [];
   el('content').innerHTML = state.riwayat.length===0 ? '<div class="empty-state">Belum ada transaksi</div>' :
     state.riwayat.map(t=>`
-      <div class="card">
+      <div class="card riwayat-card" data-id="${t.ID}" style="cursor:pointer;">
         <div class="row-between">
           <div>
             <div style="font-weight:600;font-size:13.5px;">Transaksi #${t.ID}</div>
-            <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">${new Date(t.Tanggal).toLocaleString('id-ID')} · ${t.Kasir}</div>
+            <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">${new Date(t.Tanggal).toLocaleString('id-ID')} · ${esc(t.Kasir)}</div>
           </div>
           <div class="mono" style="font-weight:700;color:var(--primary);">${rupiah(t.TotalBayar)}</div>
         </div>
+        <div style="margin-top:8px;font-size:12px;font-weight:600;color:var(--primary-light);">🖨 Lihat & cetak nota</div>
       </div>
     `).join('');
+  el('content').querySelectorAll('.riwayat-card').forEach(c=> c.addEventListener('click', ()=> bukaNota(c.dataset.id)));
+}
+
+async function bukaNota(id){
+  showToast('Memuat nota...');
+  try{
+    const res = await apiGet('getNota', {id});
+    if(res.success) openNotaSheet(res.data, 'ulang');
+    else showToast(res.message || 'Nota tidak ditemukan');
+  }catch(err){ showToast('Gagal menghubungi server'); }
+}
+
+/* ======================= NOTA ======================= */
+function fmtTanggalNota(iso){
+  const d = new Date(iso);
+  return d.toLocaleDateString('id-ID') + ' ' + d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+}
+
+function notaHtml(n, ulang){
+  return `<div class="nota">
+    <div class="c b big">${esc(TOKO.nama)}</div>
+    ${TOKO.alamat?`<div class="c">${esc(TOKO.alamat)}</div>`:''}
+    ${TOKO.telp?`<div class="c">${esc(TOKO.telp)}</div>`:''}
+    <hr>
+    <div class="r"><span>No</span><span>#${n.id}</span></div>
+    <div class="r"><span>Tanggal</span><span>${fmtTanggalNota(n.tanggal)}</span></div>
+    <div class="r"><span>Kasir</span><span>${esc(n.kasir)}</span></div>
+    <hr>
+    ${n.items.map(i=>`<div class="it"><div>${esc(i.nama)}</div><div class="r"><span>${i.qty} x ${rupiah(i.harga)}</span><span>${rupiah(i.subtotal)}</span></div></div>`).join('')}
+    <hr>
+    <div class="r b big"><span>TOTAL</span><span>${rupiah(n.total)}</span></div>
+    <div class="r"><span>Bayar</span><span>${rupiah(n.bayar)}</span></div>
+    <div class="r"><span>Kembali</span><span>${rupiah(n.kembalian)}</span></div>
+    <hr>
+    <div class="c">${esc(TOKO.footer)}</div>
+    ${ulang?'<div class="c" style="margin-top:6px;">*** SALINAN NOTA ***</div>':''}
+  </div>`;
+}
+
+function cetakNota(n, ulang){
+  const pa = el('print-area');
+  pa.style.width = TOKO.lebarKertas;
+  pa.innerHTML = notaHtml(n, ulang);
+  try{ window.print(); }catch(err){ showToast('Browser ini belum mendukung cetak'); }
+}
+
+function openNotaSheet(n, mode){
+  const ulang = (mode==='ulang');
+  el('sheet-root').innerHTML = `
+    <div class="overlay" id="nota-overlay">
+      <div class="sheet">
+        <button class="close-sheet" id="close-nota">✕</button>
+        <div class="sheet-handle"></div>
+        <h2>${ulang ? 'Nota #'+n.id : 'Transaksi Berhasil'}</h2>
+        ${ulang ? '' : `<div class="pay-row kembalian"><span>Kembalian</span><span class="val mono">${rupiah(n.kembalian)}</span></div>`}
+        ${notaHtml(n, ulang)}
+        <button class="btn-primary" id="print-nota-btn">🖨 Cetak Nota</button>
+        <button class="btn-secondary" id="done-nota-btn">${ulang ? 'Tutup' : 'Transaksi Baru'}</button>
+      </div>
+    </div>
+  `;
+  const tutup = ()=>{ el('sheet-root').innerHTML=''; };
+  el('close-nota').addEventListener('click', tutup);
+  el('done-nota-btn').addEventListener('click', tutup);
+  el('nota-overlay').addEventListener('click', (e)=>{ if(e.target.id==='nota-overlay') tutup(); });
+  el('print-nota-btn').addEventListener('click', ()=> cetakNota(n, ulang));
 }
 
 /* ======================= SERVICE WORKER ======================= */
