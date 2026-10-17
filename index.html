@@ -92,7 +92,7 @@
 
   /* ---------- SHEET / MODAL ---------- */
   .overlay{position:absolute;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-end;z-index:20;}
-  .sheet{background:var(--bg);width:100%;max-height:88%;border-radius:20px 20px 0 0;padding:18px;overflow-y:auto;}
+  .sheet{background:var(--bg);width:100%;max-height:88%;border-radius:20px 20px 0 0;padding:18px;overflow-y:auto;position:relative;}
   .sheet-handle{width:36px;height:4px;background:var(--border);border-radius:4px;margin:0 auto 14px;}
   .sheet h2{font-size:18px;margin-bottom:14px;}
 
@@ -182,6 +182,10 @@
     #print-area .nota{border:none;border-radius:0;max-width:none;width:100%;margin:0;padding:2mm 3mm;font-size:11px;}
     @page{margin:0;}
   }
+  .kredit-box{background:var(--accent-soft);border-radius:12px;padding:12px 12px 2px;margin:4px 0 12px;}
+  .kredit-warn{font-size:12.5px;color:#6A4C0F;margin-bottom:10px;line-height:1.45;}
+  .pt-row{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer;}
+  .pt-row.sel{border-color:var(--accent);background:var(--accent-soft);}
   .fab{position:absolute;right:18px;bottom:80px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;font-size:26px;box-shadow:0 8px 20px rgba(0,0,0,.25);z-index:15;}
 
   .badge{font-size:10px;padding:2px 8px;border-radius:10px;background:var(--surface-2);color:var(--ink-soft);font-weight:600;}
@@ -228,13 +232,13 @@
 
 <script>
 /* ======================= KONFIGURASI ======================= */
-const API_URL = 'https://script.google.com/macros/s/AKfycbwQkO6Ry8nNF92QpyK6p2_I8LhL_hXCIBo8-L8IvlGfig8Povl6PQhwSE8HP1elBfnd/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycby1sIoAPp3GrQ-_5WyqKZ_5MfqG62bAFKC4cnziPN_uvj1XzsYnDeVvHpaz3WTgvMo/exec';
 
 /* Identitas toko yang tercetak di nota. Ganti sesuai toko Anda. */
 const TOKO = {
-  nama: 'TOKO SINAR',
-  alamat: 'Kidangan jepon RT 06/RW 06',
-  telp: '089-543-345-7700',
+  nama: 'Nama Toko Anda',
+  alamat: 'Alamat toko Anda',
+  telp: '08xx-xxxx-xxxx',
   footer: 'Terima kasih sudah berbelanja',
   lebarKertas: '58mm'   // ganti '80mm' jika printer struk Anda 80mm
 };
@@ -258,6 +262,10 @@ let state = {
   laporanStok: null,
   stokFilter: 'Semua',
   masuk: [],
+  pelanggan: [],
+  piutang: null,
+  piutangCari: '',
+  laporanPiutang: null,
   laporanRange: { mulai: '', sampai: '' },
   riwayat: []
 };
@@ -289,12 +297,12 @@ const demoDB = {
     {ID:7,Nama:'Kopi Kapal Api',Kategori:'Minuman',HargaBeli:1200,HargaJual:2000,Stok:60,Satuan:'sachet'},
     {ID:8,Nama:'Sabun Lifebuoy',Kategori:'Produk Kebersihan',HargaBeli:3000,HargaJual:4000,Stok:0,Satuan:'pcs'}
   ],
-  transaksi:[], detail:[], masuk:[]
+  transaksi:[], detail:[], masuk:[], pelanggan:[], pelunasan:[]
 };
 (function seedDemo(){
   const d=demoDB; let tid=1, did=1;
-  const plan=[[0,[[1,5],[2,2]]],[1,[[4,1],[7,6]]],[1,[[3,3],[6,2]]],[2,[[1,10],[7,8]]],[3,[[5,1],[2,4]]],[4,[[4,2],[6,1],[3,2]]],[5,[[2,6],[1,4]]]];
-  plan.forEach(([hari,items])=>{
+  d.pelanggan.push({ID:1,Nama:'Bu Siti',Telepon:'081234567890'},{ID:2,Nama:'Pak Budi',Telepon:'082111222333'},{ID:3,Nama:'Warung Maju',Telepon:''});
+  const addTx=(hari,items,bayar,pid)=>{
     const tgl=new Date(Date.now()-hari*86400000).toISOString();
     let total=0;
     items.forEach(([bid,qty])=>{
@@ -302,9 +310,18 @@ const demoDB = {
       d.detail.push({ID:did++,TransaksiID:tid,BarangID:bid,NamaBarang:b.Nama,Qty:qty,HargaSatuan:b.HargaJual,Subtotal:qty*b.HargaJual,HargaBeli:b.HargaBeli});
       total+=qty*b.HargaJual;
     });
-    d.transaksi.push({ID:tid,Tanggal:tgl,Kasir:'Kasir 1',TotalItem:items.length,TotalBayar:total,Bayar:total,Kembalian:0});
+    const pl=d.pelanggan.find(x=>x.ID===pid);
+    const bay=bayar==null?total:bayar;
+    d.transaksi.push({ID:tid,Tanggal:tgl,Kasir:'Kasir 1',TotalItem:items.length,TotalBayar:total,Bayar:bay,Kembalian:Math.max(bay-total,0),PelangganID:pid||'',NamaPelanggan:pl?pl.Nama:'',Sisa:Math.max(total-bay,0)});
     tid++;
-  });
+  };
+  addTx(0,[[1,5],[2,2]]); addTx(1,[[4,1],[7,6]]); addTx(1,[[3,3],[6,2]]); addTx(2,[[1,10],[7,8]]);
+  addTx(3,[[5,1],[2,4]]); addTx(4,[[4,2],[6,1],[3,2]]); addTx(5,[[2,6],[1,4]]);
+  addTx(12,[[4,1],[6,2]],50000,1);   // Bu Siti: bayar sebagian
+  addTx(2,[[4,1],[5,1]],60000,2);    // Pak Budi: bayar sebagian
+  addTx(40,[[1,20],[7,10]],0,3);     // Warung Maju: belum bayar sama sekali (lebih dari 30 hari)
+  const t8=d.transaksi.find(x=>x.ID===8); t8.Sisa-=20000;
+  d.pelunasan.push({ID:1,Tanggal:new Date(Date.now()-3*86400000).toISOString(),PelangganID:1,NamaPelanggan:'Bu Siti',TransaksiID:8,Jumlah:20000,Catatan:'Cicilan pertama',Petugas:'Kasir 1'});
   [[3,1,'Indomie Goreng',40,2500,'Agen Mie Jaya'],[2,2,'Aqua 600ml',24,2800,'Distributor Air'],[1,5,'Minyak Goreng 1L',6,16000,'Toko Grosir Makmur']].forEach(([hari,bid,nm,q,hb,sup],i)=>{
     d.masuk.push({ID:i+1,Tanggal:new Date(Date.now()-hari*86400000).toISOString(),BarangID:bid,NamaBarang:nm,Qty:q,HargaBeli:hb,Supplier:sup,Catatan:'',Petugas:'Pemilik Toko'});
   });
@@ -313,6 +330,16 @@ const demoDB = {
 function demoApi(action, p){
   const d = demoDB;
   const nextId = a => a.reduce((m,x)=>Math.max(m,Number(x.ID)||0),0)+1;
+  const openPiutang=()=>{
+    const o={};
+    d.transaksi.forEach(t=>{
+      if((t.Sisa||0)<=0) return;
+      const pl=d.pelanggan.find(x=>x.ID===t.PelangganID)||{};
+      const e=o[t.PelangganID]||(o[t.PelangganID]={id:t.PelangganID,nama:pl.Nama||t.NamaPelanggan,telepon:pl.Telepon||'',total:0,transaksi:[]});
+      e.total+=t.Sisa; e.transaksi.push({id:t.ID,tanggal:t.Tanggal,total:t.TotalBayar,sisa:t.Sisa});
+    });
+    return Object.values(o).map(e=>{ e.transaksi.sort((a,b)=>a.tanggal.localeCompare(b.tanggal)); e.tertua=e.transaksi[0].tanggal; e.jumlahTransaksi=e.transaksi.length; return e; }).sort((a,b)=>b.total-a.total);
+  };
   if(action==='login'){
     const u = d.users.find(x=>x.Username===p.username && x.Password===p.password);
     return u ? {success:true,nama:u.Nama,role:u.Role,username:u.Username} : {success:false,message:'Username atau password salah'};
@@ -323,14 +350,25 @@ function demoApi(action, p){
   if(action==='deleteBarang'){ d.barang=d.barang.filter(x=>Number(x.ID)!==Number(p.id)); return {success:true}; }
   if(action==='checkout'){
     const total=p.items.reduce((s,i)=>s+i.qty*i.harga,0);
-    if(p.bayar<total) return {success:false,message:'Uang bayar kurang dari total'};
+    const bayar=Number(p.bayar)||0;
+    const sisa=Math.max(total-bayar,0);
+    let pel=null;
+    if(sisa>0){
+      if(p.pelangganId) pel=d.pelanggan.find(x=>Number(x.ID)===Number(p.pelangganId))||null;
+      if(!pel && p.pelangganBaru && String(p.pelangganBaru.nama||'').trim()){
+        const nm=String(p.pelangganBaru.nama).trim();
+        pel=d.pelanggan.find(x=>x.Nama.toLowerCase()===nm.toLowerCase());
+        if(!pel){ pel={ID:nextId(d.pelanggan),Nama:nm,Telepon:p.pelangganBaru.telepon||''}; d.pelanggan.push(pel); }
+      }
+      if(!pel) return {success:false,message:'Pilih atau isi nama pelanggan untuk pembayaran yang kurang'};
+    }
     const id=nextId(d.transaksi);
-    d.transaksi.push({ID:id,Tanggal:new Date().toISOString(),Kasir:p.kasir,TotalItem:p.items.length,TotalBayar:total,Bayar:p.bayar,Kembalian:p.bayar-total});
+    d.transaksi.push({ID:id,Tanggal:new Date().toISOString(),Kasir:p.kasir,TotalItem:p.items.length,TotalBayar:total,Bayar:bayar,Kembalian:Math.max(bayar-total,0),PelangganID:pel?pel.ID:'',NamaPelanggan:pel?pel.Nama:'',Sisa:sisa});
     p.items.forEach(i=>{
       d.detail.push({ID:nextId(d.detail),TransaksiID:id,BarangID:i.id,NamaBarang:i.nama,Qty:i.qty,HargaSatuan:i.harga,Subtotal:i.qty*i.harga,HargaBeli:(d.barang.find(x=>Number(x.ID)===Number(i.id))||{}).HargaBeli||0});
       const b=d.barang.find(x=>Number(x.ID)===Number(i.id)); if(b) b.Stok=Number(b.Stok)-i.qty;
     });
-    return {success:true,transaksiId:id,total,kembalian:p.bayar-total};
+    return {success:true,transaksiId:id,total,kembalian:Math.max(bayar-total,0),sisa,pelangganId:pel?pel.ID:'',pelanggan:pel?pel.Nama:''};
   }
   if(action==='addBarangMasuk'){
     const q=Number(p.qty);
@@ -365,7 +403,51 @@ function demoApi(action, p){
     const t=d.transaksi.find(x=>Number(x.ID)===Number(p.id));
     if(!t) return {success:false,message:'Transaksi tidak ditemukan'};
     const items=d.detail.filter(x=>Number(x.TransaksiID)===Number(p.id)).map(x=>({nama:x.NamaBarang,qty:x.Qty,harga:x.HargaSatuan,subtotal:x.Subtotal}));
-    return {success:true,data:{id:t.ID,tanggal:t.Tanggal,kasir:t.Kasir,total:t.TotalBayar,bayar:t.Bayar,kembalian:t.Kembalian,items}};
+    const pelunasan=d.pelunasan.filter(x=>Number(x.TransaksiID)===Number(p.id)).map(x=>({tanggal:x.Tanggal,jumlah:x.Jumlah}));
+    return {success:true,data:{id:t.ID,tanggal:t.Tanggal,kasir:t.Kasir,total:t.TotalBayar,bayar:t.Bayar,kembalian:t.Kembalian,pelanggan:t.NamaPelanggan||'',sisa:t.Sisa||0,kredit:!!t.PelangganID&&t.Bayar<t.TotalBayar,pelunasan,items}};
+  }
+  if(action==='getPelanggan'){
+    const pi={}; d.transaksi.forEach(t=>{ if((t.Sisa||0)>0) pi[t.PelangganID]=(pi[t.PelangganID]||0)+t.Sisa; });
+    return {success:true,data:d.pelanggan.map(x=>({ID:x.ID,Nama:x.Nama,Telepon:x.Telepon,piutang:pi[x.ID]||0})).sort((a,b)=>a.Nama.localeCompare(b.Nama))};
+  }
+  if(action==='getPiutang'){
+    const items=openPiutang();
+    return {success:true,data:{totalPiutang:items.reduce((s,i)=>s+i.total,0),jumlahPelanggan:items.length,items}};
+  }
+  if(action==='getPelunasan'){
+    return {success:true,data:d.pelunasan.filter(x=>!p.pelangganId||Number(x.PelangganID)===Number(p.pelangganId)).slice().reverse()};
+  }
+  if(action==='bayarPiutang'){
+    const j=Number(p.jumlah), pid=Number(p.pelangganId);
+    if(!pid) return {success:false,message:'Pilih pelanggan'};
+    if(!(j>0)) return {success:false,message:'Isi jumlah pembayaran'};
+    const pel=d.pelanggan.find(x=>x.ID===pid)||{Nama:''};
+    const rows=d.transaksi.filter(t=>Number(t.PelangganID)===pid&&(t.Sisa||0)>0).sort((a,b)=>a.Tanggal.localeCompare(b.Tanggal));
+    if(!rows.length) return {success:false,message:'Pelanggan ini tidak punya piutang'};
+    const totalOpen=rows.reduce((s,t)=>s+t.Sisa,0);
+    const sasaran=p.transaksiId?rows.filter(t=>Number(t.ID)===Number(p.transaksiId)):rows;
+    if(!sasaran.length) return {success:false,message:'Transaksi tidak ditemukan atau sudah lunas'};
+    const batas=sasaran.reduce((s,t)=>s+t.Sisa,0);
+    if(j>batas) return {success:false,message:'Jumlah melebihi sisa piutang (Rp '+batas+')'};
+    let sisaBayar=j; const alokasi=[];
+    sasaran.forEach(t=>{
+      if(sisaBayar<=0) return;
+      const pakai=Math.min(t.Sisa,sisaBayar); t.Sisa-=pakai; sisaBayar-=pakai;
+      alokasi.push({transaksiId:t.ID,jumlah:pakai});
+      d.pelunasan.push({ID:nextId(d.pelunasan),Tanggal:new Date().toISOString(),PelangganID:pid,NamaPelanggan:pel.Nama,TransaksiID:t.ID,Jumlah:pakai,Catatan:p.catatan||'',Petugas:p.petugas||''});
+    });
+    return {success:true,dibayar:j,sisaPiutang:totalOpen-j,alokasi};
+  }
+  if(action==='getLaporanPiutang'){
+    const now=Date.now(); const items=openPiutang();
+    const aging=[{label:'0–7 hari',total:0},{label:'8–30 hari',total:0},{label:'Lebih dari 30 hari',total:0}];
+    items.forEach(i=>i.transaksi.forEach(t=>{ const u=Math.floor((now-new Date(t.tanggal))/86400000); aging[u<=7?0:(u<=30?1:2)].total+=t.sisa; }));
+    const day=x=>x.slice(0,10); const inR=x=>(!p.mulai||day(x)>=p.mulai)&&(!p.sampai||day(x)<=p.sampai);
+    const baru=d.transaksi.filter(t=>inR(t.Tanggal)&&t.PelangganID&&t.Bayar<t.TotalBayar).reduce((s,t)=>s+t.TotalBayar-t.Bayar,0);
+    const pl=d.pelunasan.filter(x=>inR(x.Tanggal));
+    return {success:true,data:{totalPiutang:items.reduce((s,i)=>s+i.total,0),jumlahPelanggan:items.length,aging,
+      pelanggan:items.map(i=>({id:i.id,nama:i.nama,total:i.total,jumlahTransaksi:i.jumlahTransaksi,umurTertua:Math.floor((now-new Date(i.tertua))/86400000)})),
+      piutangBaru:baru,pelunasanDiterima:pl.reduce((s,x)=>s+x.Jumlah,0),jumlahPelunasan:pl.length,daftarPelunasan:pl.slice().reverse().slice(0,50)}};
   }
   if(action==='getTransaksi') return {success:true,data:[...d.transaksi].reverse()};
   if(action==='getLaporan'){
@@ -387,7 +469,7 @@ function demoApi(action, p){
     });
     const hit=o=>{o.laba=o.penjualan-o.modal;o.margin=o.penjualan?Math.round(o.laba/o.penjualan*1000)/10:0;return o;};
     const rekap=Object.values(pb).map(hit).sort((a,b)=>b.laba-a.laba);
-    return {success:true,data:{totalPenjualan:tp,totalModal:tm,totalLaba:tp-tm,marginPersen:tp?Math.round((tp-tm)/tp*1000)/10:0,jumlahTransaksi:tr.length,rataRata:tr.length?Math.round(tp/tr.length):0,terlaris:[...rekap].sort((a,b)=>b.qty-a.qty).slice(0,10),rekapBarang:rekap,perHari:Object.keys(ph).sort().map(k=>hit(ph[k]))}};
+    return {success:true,data:{totalPenjualan:tp,totalModal:tm,totalLaba:tp-tm,marginPersen:tp?Math.round((tp-tm)/tp*1000)/10:0,jumlahTransaksi:tr.length,belumTertagih:tr.reduce((s,t)=>s+(t.Sisa||0),0),rataRata:tr.length?Math.round(tp/tr.length):0,terlaris:[...rekap].sort((a,b)=>b.qty-a.qty).slice(0,10),rekapBarang:rekap,perHari:Object.keys(ph).sort().map(k=>hit(ph[k]))}};
   }
   return {success:false,message:'Aksi tidak dikenal'};
 }
@@ -456,6 +538,7 @@ async function bootMain(){
   el('topbar-role').textContent = state.user.role;
   const data = await apiGet('getBarang');
   state.barang = data.data || [];
+  try{ const pel = await apiGet('getPelanggan'); state.pelanggan = pel.data || []; }catch(err){ state.pelanggan = []; }
   setView('kasir');
 }
 
@@ -466,12 +549,14 @@ function navItems(){
       {id:'kasir', label:'Kasir', icon:'🛒'},
       {id:'barang', label:'Barang', icon:'📦'},
       {id:'masuk', label:'Masuk', icon:'📥'},
+      {id:'piutang', label:'Piutang', icon:'💳'},
       {id:'laporan', label:'Laporan', icon:'📊'},
       {id:'riwayat', label:'Riwayat', icon:'🧾'}
     ];
   }
   return [
     {id:'kasir', label:'Kasir', icon:'🛒'},
+    {id:'piutang', label:'Piutang', icon:'💳'},
     {id:'riwayat', label:'Riwayat', icon:'🧾'}
   ];
 }
@@ -489,48 +574,80 @@ function renderNav(){
 
 function setView(view){
   state.view = view;
-  el('topbar-title').textContent = {kasir:'Kasir', barang:'Barang', masuk:'Barang Masuk', laporan:'Laporan', riwayat:'Riwayat'}[view];
+  el('topbar-title').textContent = {kasir:'Kasir', barang:'Barang', masuk:'Barang Masuk', piutang:'Piutang', laporan:'Laporan', riwayat:'Riwayat'}[view];
   renderNav();
   if(el('fab-barang')) el('fab-barang').classList.add('hidden');
   if(view==='kasir') renderKasir();
   if(view==='barang') renderBarang();
   if(view==='masuk') renderMasuk();
+  if(view==='piutang') renderPiutang();
   if(view==='laporan') renderLaporan();
   if(view==='riwayat') renderRiwayat();
 }
 
 /* ======================= KASIR VIEW ======================= */
-function renderKasir(){
+function refreshCartBar(){
   el('cart-bar').classList.toggle('hidden', state.cart.length===0);
   updateCartBar();
+}
 
-  const kategoris = ['Semua', ...new Set(state.barang.map(b=>b.Kategori).filter(Boolean))];
-  const filtered = state.barang.filter(b=>{
-    const matchSearch = b.Nama.toLowerCase().includes(state.search.toLowerCase());
-    const matchKategori = state.kategori==='Semua' || b.Kategori===state.kategori;
-    return matchSearch && matchKategori;
-  });
-
+/* Kerangka halaman kasir dibuat sekali. Kolom pencarian tidak ikut digambar ulang
+   saat mengetik, supaya fokus & keyboard tidak hilang. Hanya daftar barang yang diperbarui. */
+function renderKasir(){
+  refreshCartBar();
   el('content').innerHTML = `
-    <div class="search-box"><input id="search-input" placeholder="Cari barang..." value="${state.search}"></div>
-    <div class="chips">${kategoris.map(k=>`<button class="chip ${k===state.kategori?'active':''}" data-k="${k}">${k}</button>`).join('')}</div>
-    ${filtered.length===0 ? '<div class="empty-state">Barang tidak ditemukan.<br>Tambahkan barang dulu di tab Barang.</div>' : `
-    <div class="product-grid">
-      ${filtered.map(b=>{
-        const stok = Number(b.Stok);
-        return `<div class="product-card ${stok<=0?'out-of-stock':''}" data-id="${b.ID}">
-          <div class="pname">${b.Nama}</div>
-          <div class="pstock ${stok<=5?'low':''}">Stok: ${stok} ${b.Satuan||''}</div>
-          <div class="pprice mono">${rupiah(b.HargaJual)}</div>
-          <button class="add-btn" data-id="${b.ID}">+</button>
-        </div>`;
-      }).join('')}
-    </div>`}
+    <div class="search-box"><input id="search-input" placeholder="Cari barang..." value="${esc(state.search)}" autocomplete="off"></div>
+    <div class="chips" id="kasir-chips"></div>
+    <div id="kasir-grid"></div>
   `;
+  let timer = null;
+  el('search-input').addEventListener('input', (e)=>{
+    state.search = e.target.value;
+    clearTimeout(timer);
+    timer = setTimeout(renderKasirGrid, 200);   // tunggu jeda ketik sebentar
+  });
+  renderKasirChips();
+  renderKasirGrid();
+}
 
-  el('search-input').addEventListener('input', (e)=>{ state.search = e.target.value; renderKasir(); });
-  el('content').querySelectorAll('.chip').forEach(c=> c.addEventListener('click', ()=>{ state.kategori=c.dataset.k; renderKasir(); }));
-  el('content').querySelectorAll('.add-btn').forEach(b=> b.addEventListener('click', ()=> addToCart(b.dataset.id)));
+function renderKasirChips(){
+  const box = el('kasir-chips'); if(!box) return;
+  const kategoris = ['Semua', ...new Set(state.barang.map(b=>b.Kategori).filter(Boolean))];
+  box.innerHTML = kategoris.map(k=>`<button class="chip ${k===state.kategori?'active':''}" data-k="${esc(k)}">${esc(k)}</button>`).join('');
+  box.querySelectorAll('.chip').forEach(c=> c.addEventListener('click', ()=>{
+    state.kategori = c.dataset.k;
+    renderKasirChips();
+    renderKasirGrid();
+  }));
+}
+
+function renderKasirGrid(){
+  const box = el('kasir-grid'); if(!box) return;
+  // beberapa kata boleh dicari sekaligus, misalnya "indo gor" menemukan "Indomie Goreng"
+  const kata = state.search.toLowerCase().split(/\s+/).filter(Boolean);
+  const filtered = state.barang.filter(b=>{
+    const nama = String(b.Nama).toLowerCase();
+    const cocokNama = kata.every(k=> nama.includes(k));
+    const cocokKategori = state.kategori==='Semua' || b.Kategori===state.kategori;
+    return cocokNama && cocokKategori;
+  });
+  if(filtered.length===0){
+    const sedangCari = kata.length>0 || state.kategori!=='Semua';
+    box.innerHTML = `<div class="empty-state">${sedangCari ? 'Barang tidak ditemukan.' : 'Belum ada barang.<br>Tambahkan barang dulu di tab Barang.'}</div>`;
+    return;
+  }
+  box.innerHTML = `<div class="product-grid">
+    ${filtered.map(b=>{
+      const stok = Number(b.Stok);
+      return `<div class="product-card ${stok<=0?'out-of-stock':''}" data-id="${b.ID}">
+        <div class="pname">${esc(b.Nama)}</div>
+        <div class="pstock ${stok<=5?'low':''}">Stok: ${stok} ${esc(b.Satuan||'')}</div>
+        <div class="pprice mono">${rupiah(b.HargaJual)}</div>
+        <button class="add-btn" data-id="${b.ID}">+</button>
+      </div>`;
+    }).join('')}
+  </div>`;
+  box.querySelectorAll('.add-btn').forEach(b=> b.addEventListener('click', ()=> addToCart(b.dataset.id)));
 }
 
 function addToCart(id){
@@ -541,7 +658,7 @@ function addToCart(id){
   if(qtyInCart+1 > Number(barang.Stok)){ showToast('Stok tidak cukup'); return; }
   if(existing) existing.qty += 1;
   else state.cart.push({id: barang.ID, nama: barang.Nama, harga: Number(barang.HargaJual), qty:1, stokMax: Number(barang.Stok)});
-  renderKasir();
+  refreshCartBar();
 }
 
 function updateCartBar(){
@@ -591,7 +708,7 @@ function changeQty(id, delta){
   item.qty += delta;
   if(item.qty > item.stokMax){ item.qty = item.stokMax; showToast('Stok tidak cukup'); }
   if(item.qty <= 0) state.cart = state.cart.filter(c=> String(c.id)!==String(id));
-  renderKasir();
+  refreshCartBar();
   openCartSheet();
 }
 
@@ -605,35 +722,76 @@ function openPaymentSheet(){
         <h2>Pembayaran</h2>
         <div class="pay-row"><span>Total belanja</span><span class="val mono">${rupiah(total)}</span></div>
         <div class="field"><label>Uang diterima</label><input id="bayar-input" inputmode="numeric" placeholder="0"></div>
-        <div class="pay-row kembalian"><span>Kembalian</span><span class="val mono" id="kembalian-val">Rp0</span></div>
+        <div class="pay-row kembalian"><span id="kembalian-label">Kembalian</span><span class="val mono" id="kembalian-val">Rp0</span></div>
+        <div id="kredit-box" class="kredit-box hidden">
+          <div class="kredit-warn">Pembayaran kurang dari total. Sisanya dicatat sebagai <b>piutang</b> pelanggan.</div>
+          <div class="field"><label>Pelanggan</label>
+            <select id="p-pel">
+              <option value="">Pilih pelanggan</option>
+              ${state.pelanggan.map(p=>`<option value="${p.ID}">${esc(p.Nama)}${p.piutang>0?' · piutang '+rupiah(p.piutang):''}</option>`).join('')}
+              <option value="baru">+ Pelanggan baru</option>
+            </select>
+          </div>
+          <div id="p-baru" class="hidden">
+            <div class="field"><label>Nama pelanggan</label><input id="p-nama"></div>
+            <div class="field"><label>No. telepon (opsional)</label><input id="p-telp" inputmode="tel"></div>
+          </div>
+        </div>
         <button class="btn-primary" id="confirm-pay-btn">Selesaikan Transaksi</button>
       </div>
     </div>
   `;
+  const baca = ()=> Number(el('bayar-input').value.replace(/\D/g,'')) || 0;
+  const tampil = (paksa)=>{
+    const terisi = el('bayar-input').value.trim() !== '';
+    const bayar = baca();
+    const kurang = (terisi || paksa) && bayar < total;
+    el('kredit-box').classList.toggle('hidden', !kurang);
+    el('kembalian-label').textContent = kurang ? 'Sisa piutang' : 'Kembalian';
+    el('kembalian-val').textContent = rupiah(kurang ? total-bayar : Math.max(bayar-total,0));
+    el('confirm-pay-btn').textContent = kurang ? 'Simpan sebagai Piutang' : 'Selesaikan Transaksi';
+  };
   el('close-pay').addEventListener('click', ()=> el('sheet-root').innerHTML='');
   el('pay-overlay').addEventListener('click', (e)=>{ if(e.target.id==='pay-overlay') el('sheet-root').innerHTML=''; });
-  el('bayar-input').addEventListener('input', (e)=>{
-    const bayar = Number(e.target.value.replace(/\D/g,'')) || 0;
-    el('kembalian-val').textContent = rupiah(Math.max(bayar-total,0));
+  el('bayar-input').addEventListener('input', ()=> tampil(false));
+  el('p-pel').addEventListener('change', ()=> el('p-baru').classList.toggle('hidden', el('p-pel').value!=='baru'));
+  el('confirm-pay-btn').addEventListener('click', ()=>{
+    if(baca() < total && el('kredit-box').classList.contains('hidden')){
+      // kolom uang diterima kosong: seluruh belanja akan jadi piutang, minta pelanggan dulu
+      tampil(true);
+      showToast('Pilih pelanggan untuk dicatat sebagai piutang');
+      return;
+    }
+    finalisasiTransaksi(total);
   });
-  el('confirm-pay-btn').addEventListener('click', ()=> finalisasiTransaksi(total));
 }
 
 async function finalisasiTransaksi(total){
   const bayar = Number(el('bayar-input').value.replace(/\D/g,'')) || 0;
-  if(bayar < total){ showToast('Uang diterima kurang dari total'); return; }
+  const kurang = bayar < total;
+  let pel = {};
+  if(kurang){
+    const sel = el('p-pel').value;
+    if(!sel){ showToast('Pilih pelanggan untuk piutang'); return; }
+    if(sel==='baru'){
+      const nama = el('p-nama').value.trim();
+      if(!nama){ showToast('Isi nama pelanggan'); return; }
+      pel = {pelangganBaru:{nama, telepon: el('p-telp').value.trim()}};
+    } else pel = {pelangganId: sel};
+  }
   el('confirm-pay-btn').disabled = true; el('confirm-pay-btn').textContent = 'Memproses...';
   try{
     const res = await apiPost('checkout', {
       kasir: state.user.nama,
       items: state.cart.map(c=>({id:c.id, nama:c.nama, qty:c.qty, harga:c.harga})),
-      bayar
+      bayar, ...pel
     });
     if(res.success){
       const nota = {
         id: res.transaksiId, tanggal: new Date().toISOString(), kasir: state.user.nama,
         items: state.cart.map(c=>({nama:c.nama, qty:c.qty, harga:c.harga, subtotal:c.qty*c.harga})),
-        total, bayar, kembalian: res.kembalian
+        total, bayar, kembalian: res.kembalian,
+        kredit: kurang, sisa: res.sisa||0, pelanggan: res.pelanggan||'', pelunasan: []
       };
       state.cart.forEach(c=>{
         const b = state.barang.find(x=> String(x.ID)===String(c.id));
@@ -643,6 +801,7 @@ async function finalisasiTransaksi(total){
       state.laporanStok = null;
       renderKasir();
       openNotaSheet(nota, 'baru');
+      if(kurang) apiGet('getPelanggan').then(r=>{ state.pelanggan = r.data || state.pelanggan; }).catch(()=>{});
       return;
     } else {
       showToast(res.message || 'Transaksi gagal');
@@ -651,7 +810,7 @@ async function finalisasiTransaksi(total){
     showToast('Gagal menghubungi server');
   }
   const btn = el('confirm-pay-btn');
-  if(btn){ btn.disabled=false; btn.textContent='Selesaikan Transaksi'; }
+  if(btn){ btn.disabled=false; btn.textContent = kurang ? 'Simpan sebagai Piutang' : 'Selesaikan Transaksi'; }
 }
 
 /* ======================= BARANG VIEW ======================= */
@@ -870,6 +1029,152 @@ async function simpanMasuk(){
   if(again){ again.disabled=false; again.textContent='Simpan & Tambah Stok'; }
 }
 
+/* ======================= PIUTANG & PELUNASAN ======================= */
+function umurHari(iso){ return Math.max(0, Math.floor((Date.now()-new Date(iso).getTime())/86400000)); }
+
+function renderPiutang(){
+  el('cart-bar').classList.add('hidden');
+  el('content').innerHTML = `
+    <div id="piutang-sum"><div class="empty-state">Memuat piutang...</div></div>
+    <div class="search-box"><input id="piutang-cari" placeholder="Cari pelanggan..." value="${esc(state.piutangCari)}"></div>
+    <div id="piutang-list"></div>
+  `;
+  el('piutang-cari').addEventListener('input', (e)=>{ state.piutangCari = e.target.value; tampilkanDaftarPiutang(); });
+  muatPiutang();
+}
+
+async function muatPiutang(){
+  try{
+    const res = await apiGet('getPiutang');
+    if(!res.success){ showToast(res.message || 'Gagal memuat piutang'); return; }
+    state.piutang = res.data;
+  }catch(err){ showToast('Gagal menghubungi server'); return; }
+  tampilkanDaftarPiutang();
+}
+
+function tampilkanDaftarPiutang(){
+  const d = state.piutang;
+  if(!d || !el('piutang-sum')) return;
+  el('piutang-sum').innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="label">Total Piutang</div><div class="value">${rupiah(d.totalPiutang)}</div></div>
+      <div class="stat-card accent"><div class="label">Pelanggan Berutang</div><div class="value">${d.jumlahPelanggan}</div></div>
+    </div>`;
+  const q = state.piutangCari.toLowerCase();
+  const items = d.items.filter(i=> String(i.nama).toLowerCase().includes(q));
+  el('piutang-list').innerHTML = items.length===0
+    ? `<div class="empty-state">${d.items.length===0 ? 'Tidak ada piutang. Semua transaksi sudah lunas.' : 'Pelanggan tidak ditemukan.'}</div>`
+    : items.map(i=>{
+      const umur = umurHari(i.tertua);
+      return `<div class="card piutang-card" data-id="${i.id}" style="cursor:pointer;">
+        <div class="row-between" style="gap:10px;">
+          <div style="min-width:0;">
+            <div style="font-weight:600;font-size:14px;">${esc(i.nama)}</div>
+            <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">${i.jumlahTransaksi} transaksi · tertua ${umur} hari</div>
+          </div>
+          <div class="mono" style="font-weight:700;color:var(--danger);flex-shrink:0;">${rupiah(i.total)}</div>
+        </div>
+        <div style="margin-top:8px;font-size:12px;font-weight:600;color:var(--primary-light);">Terima pelunasan →</div>
+      </div>`;
+    }).join('');
+  el('piutang-list').querySelectorAll('.piutang-card').forEach(c=> c.addEventListener('click', ()=> openPiutangDetail(c.dataset.id)));
+}
+
+async function openPiutangDetail(id){
+  const p = state.piutang && state.piutang.items.find(x=> String(x.id)===String(id));
+  if(!p) return;
+  let target = null;   // id transaksi yang dipilih; null = otomatis terlama dulu
+  el('sheet-root').innerHTML = `
+    <div class="overlay" id="pt-overlay">
+      <div class="sheet">
+        <button class="close-sheet" id="close-pt">✕</button>
+        <div class="sheet-handle"></div>
+        <h2>${esc(p.nama)}</h2>
+        ${p.telepon ? `<div style="font-size:12px;color:var(--ink-soft);margin:-8px 0 12px;">${esc(p.telepon)}</div>` : ''}
+        <div class="pay-row"><span>Total piutang</span><span class="val mono" style="color:var(--danger);">${rupiah(p.total)}</span></div>
+        <div class="section-title" style="margin-top:4px;">Transaksi belum lunas</div>
+        ${p.transaksi.map(t=>`
+          <div class="pt-row" data-tid="${t.id}">
+            <div>
+              <div style="font-weight:600;font-size:13px;">Transaksi #${t.id}</div>
+              <div style="font-size:11px;color:var(--ink-soft);">${fmtTanggalNota(t.tanggal)} · ${umurHari(t.tanggal)} hari</div>
+            </div>
+            <div style="text-align:right;">
+              <div class="mono" style="font-weight:700;color:var(--danger);">${rupiah(t.sisa)}</div>
+              <div style="font-size:10.5px;color:var(--ink-soft);">dari ${rupiah(t.total)}</div>
+            </div>
+          </div>`).join('')}
+        <div id="pt-hint" style="font-size:11.5px;color:var(--ink-soft);margin:6px 0 14px;line-height:1.5;"></div>
+        <div class="field"><label>Jumlah dibayar</label><input id="pt-jumlah" inputmode="numeric" placeholder="0"></div>
+        <button class="btn-secondary" id="pt-isi" style="margin:-4px 0 12px;"></button>
+        <div class="field"><label>Catatan (opsional)</label><input id="pt-catatan"></div>
+        <div class="pay-row kembalian"><span>Sisa piutang setelah bayar</span><span class="val mono" id="pt-sisa"></span></div>
+        <button class="btn-primary" id="pt-simpan">Terima Pembayaran</button>
+        <div class="section-title">Riwayat pelunasan</div>
+        <div id="pt-riwayat"><div style="font-size:12px;color:var(--ink-soft);">Memuat...</div></div>
+      </div>
+    </div>
+  `;
+  const batas = ()=>{
+    if(target==null) return p.total;
+    const t = p.transaksi.find(x=> String(x.id)===String(target));
+    return t ? t.sisa : p.total;
+  };
+  const baca = ()=> Number(el('pt-jumlah').value.replace(/\D/g,'')) || 0;
+  const perbarui = ()=>{
+    el('pt-hint').textContent = target==null
+      ? 'Pembayaran otomatis dialokasikan ke transaksi terlama dulu. Ketuk satu transaksi di atas untuk melunasi transaksi itu saja.'
+      : `Pembayaran hanya untuk transaksi #${target}. Ketuk lagi untuk membatalkan pilihan.`;
+    el('pt-isi').textContent = `Isi sebesar sisa (${rupiah(batas())})`;
+    el('pt-sisa').textContent = rupiah(Math.max(p.total - Math.min(baca(), batas()), 0));
+    el('sheet-root').querySelectorAll('.pt-row').forEach(r=> r.classList.toggle('sel', String(r.dataset.tid)===String(target)));
+  };
+  const tutup = ()=>{ el('sheet-root').innerHTML=''; };
+  el('close-pt').addEventListener('click', tutup);
+  el('pt-overlay').addEventListener('click', (e)=>{ if(e.target.id==='pt-overlay') tutup(); });
+  el('sheet-root').querySelectorAll('.pt-row').forEach(r=> r.addEventListener('click', ()=>{
+    target = (String(target)===String(r.dataset.tid)) ? null : r.dataset.tid;
+    perbarui();
+  }));
+  el('pt-jumlah').addEventListener('input', perbarui);
+  el('pt-isi').addEventListener('click', ()=>{ el('pt-jumlah').value = batas(); perbarui(); });
+  el('pt-simpan').addEventListener('click', async ()=>{
+    const jumlah = baca();
+    if(jumlah<=0){ showToast('Isi jumlah pembayaran'); return; }
+    if(jumlah>batas()){ showToast('Jumlah melebihi sisa piutang'); return; }
+    const btn = el('pt-simpan'); btn.disabled=true; btn.textContent='Menyimpan...';
+    try{
+      const res = await apiPost('bayarPiutang', {
+        pelangganId: p.id, jumlah, transaksiId: target || '',
+        catatan: el('pt-catatan').value.trim(), petugas: state.user.nama
+      });
+      if(res.success){
+        tutup();
+        showToast(`Pelunasan ${rupiah(jumlah)} diterima · sisa ${rupiah(res.sisaPiutang)}`);
+        state.laporanPiutang = null;
+        apiGet('getPelanggan').then(r=>{ state.pelanggan = r.data || state.pelanggan; }).catch(()=>{});
+        muatPiutang();
+        return;
+      }
+      showToast(res.message || 'Gagal menyimpan pelunasan');
+    }catch(err){ showToast('Gagal menghubungi server'); }
+    const again = el('pt-simpan'); if(again){ again.disabled=false; again.textContent='Terima Pembayaran'; }
+  });
+  perbarui();
+
+  // riwayat pelunasan pelanggan ini
+  try{
+    const r = await apiGet('getPelunasan', {pelangganId: p.id});
+    const list = (r.data||[]).slice(0,10);
+    const box = el('pt-riwayat'); if(!box) return;
+    box.innerHTML = list.length===0 ? '<div style="font-size:12px;color:var(--ink-soft);">Belum ada pelunasan.</div>' : list.map(x=>`
+      <div class="margin-row">
+        <div class="mr-top"><span class="mr-name">${fmtTanggalNota(x.Tanggal)}</span><span class="mr-laba">${rupiah(x.Jumlah)}</span></div>
+        <div class="mr-meta"><span>untuk transaksi #${x.TransaksiID}${x.Catatan?' · '+esc(x.Catatan):''}</span></div>
+      </div>`).join('');
+  }catch(err){}
+}
+
 /* ======================= LAPORAN VIEW ======================= */
 function renderLaporan(){
   el('cart-bar').classList.add('hidden');
@@ -879,6 +1184,7 @@ function renderLaporan(){
     <div class="seg">
       <button data-tab="penjualan" class="${tab==='penjualan'?'active':''}">Penjualan</button>
       <button data-tab="stok" class="${tab==='stok'?'active':''}">Stok Produk</button>
+      <button data-tab="piutang" class="${tab==='piutang'?'active':''}">Piutang</button>
     </div>
     <div class="field-row">
       <div class="field"><label>Dari tanggal</label><input type="date" id="lap-mulai" value="${state.laporanRange.mulai}"></div>
@@ -894,7 +1200,7 @@ function renderLaporan(){
     renderLaporan();
   }));
   el('lap-terapkan').addEventListener('click', muatLaporan);
-  if(tab==='stok') muatLaporan();            // stok selalu diambil terbaru
+  if(tab==='stok' || tab==='piutang') muatLaporan();   // stok & piutang selalu diambil terbaru
   else if(state.laporan) tampilkanLaporan();
 }
 
@@ -902,16 +1208,53 @@ async function muatLaporan(){
   state.laporanRange.mulai = el('lap-mulai').value;
   state.laporanRange.sampai = el('lap-sampai').value;
   const tab = state.laporanTab;
+  const aksi = {penjualan:'getLaporan', stok:'getLaporanStok', piutang:'getLaporanPiutang'}[tab];
   const btn = el('lap-terapkan');
   btn.textContent = 'Memuat...';
   try{
-    const res = await apiGet(tab==='stok' ? 'getLaporanStok' : 'getLaporan', state.laporanRange);
+    const res = await apiGet(aksi, state.laporanRange);
     if(!res.success){ showToast(res.message || 'Gagal memuat laporan'); }
     else if(tab !== state.laporanTab){ /* tab sudah berganti, abaikan */ }
     else if(tab==='stok'){ state.laporanStok = res.data; tampilkanLaporanStok(); }
+    else if(tab==='piutang'){ state.laporanPiutang = res.data; tampilkanLaporanPiutang(); }
     else { state.laporan = res.data; tampilkanLaporan(); }
   }catch(err){ showToast('Gagal menghubungi server'); }
   if(el('lap-terapkan')) el('lap-terapkan').textContent = 'Tampilkan Laporan';
+}
+
+function tampilkanLaporanPiutang(){
+  const d = state.laporanPiutang; if(!d) return;
+  const maxAging = Math.max(1, ...d.aging.map(a=>a.total));
+  el('lap-hasil').innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="label">Total Piutang Saat Ini</div><div class="value">${rupiah(d.totalPiutang)}</div><div class="sub">${d.jumlahPelanggan} pelanggan</div></div>
+      <div class="stat-card accent"><div class="label">Pelunasan Diterima</div><div class="value">${rupiah(d.pelunasanDiterima)}</div><div class="sub">${d.jumlahPelunasan} pembayaran</div></div>
+      <div class="stat-card light" style="grid-column:span 2;"><div class="label">Piutang Baru di Periode Ini</div><div class="value">${rupiah(d.piutangBaru)}</div></div>
+    </div>
+
+    <div class="section-title">Umur Piutang</div>
+    <div class="card">${d.aging.map((a,i)=>`
+      <div class="margin-row">
+        <div class="mr-top"><span class="mr-name">${a.label}</span><span class="mr-laba" ${i===2&&a.total>0?'style="color:var(--danger)"':''}>${rupiah(a.total)}</span></div>
+        <div class="bar-track" style="margin-top:6px;"><div class="bar-fill" style="width:${(a.total/maxAging)*100}%;${i===2?'background:var(--danger);':''}"></div></div>
+      </div>`).join('')}</div>
+
+    <div class="section-title">Piutang per Pelanggan</div>
+    ${d.pelanggan.length===0 ? '<div class="empty-state">Tidak ada piutang berjalan</div>' : `<div class="card">${d.pelanggan.map(x=>`
+      <div class="margin-row">
+        <div class="mr-top"><span class="mr-name">${esc(x.nama)}</span><span class="mr-laba" style="color:var(--danger);">${rupiah(x.total)}</span></div>
+        <div class="mr-meta"><span>${x.jumlahTransaksi} transaksi</span><span class="pct ${x.umurTertua>30?'low':''}">tertua ${x.umurTertua} hari</span></div>
+      </div>`).join('')}</div>`}
+
+    <div class="section-title">Pelunasan Diterima</div>
+    ${d.daftarPelunasan.length===0 ? '<div class="empty-state">Belum ada pelunasan di periode ini</div>' : `<div class="card">${d.daftarPelunasan.map(x=>`
+      <div class="margin-row">
+        <div class="mr-top"><span class="mr-name">${esc(x.NamaPelanggan)}</span><span class="mr-laba">${rupiah(x.Jumlah)}</span></div>
+        <div class="mr-meta"><span>${fmtTanggalNota(x.Tanggal)} · transaksi #${x.TransaksiID}</span></div>
+      </div>`).join('')}</div>`}
+
+    <div style="font-size:11px;color:var(--ink-soft);margin-top:14px;line-height:1.5;">Total piutang, umur piutang, dan daftar per pelanggan selalu menunjukkan kondisi hari ini. Piutang baru dan pelunasan mengikuti rentang tanggal yang dipilih. Umur dihitung sejak tanggal transaksi. Lebih dari 30 hari ditandai merah.</div>
+  `;
 }
 
 function tampilkanLaporanStok(){
@@ -965,6 +1308,8 @@ function tampilkanLaporan(){
       <div class="stat-card light"><div class="label">Rata-rata / Transaksi</div><div class="value">${rupiah(d.rataRata)}</div></div>
     </div>
 
+    <div class="card"><div class="row-between"><span style="font-size:13px;color:var(--ink-soft);">Belum tertagih (piutang transaksi periode ini)</span><span class="mono" style="font-weight:600;color:${(d.belumTertagih||0)>0?'var(--danger)':'var(--ink)'};">${rupiah(d.belumTertagih||0)}</span></div></div>
+
     <div class="section-title">Rekap Margin per Barang</div>
     ${rekap.length===0 ? '<div class="empty-state">Belum ada penjualan di rentang ini</div>' : `<div class="card">${rekap.map(r=>`
       <div class="margin-row">
@@ -987,7 +1332,7 @@ function tampilkanLaporan(){
         <div class="bar-val mono">${t.qty}x</div>
       </div>
     `).join('')}
-    <div style="font-size:11px;color:var(--ink-soft);margin-top:14px;line-height:1.5;">Laba kotor = omzet − harga beli barang yang terjual. Belum dikurangi biaya operasional (sewa, listrik, gaji). Margin di bawah 10% ditandai merah, 25% ke atas hijau.</div>
+    <div style="font-size:11px;color:var(--ink-soft);margin-top:14px;line-height:1.5;">Laba kotor = omzet − harga beli barang yang terjual. Belum dikurangi biaya operasional (sewa, listrik, gaji). Omzet dan laba dihitung dari nilai penjualan, termasuk yang masih berupa piutang. Margin di bawah 10% ditandai merah, 25% ke atas hijau.</div>
   `;
 }
 
@@ -1010,6 +1355,7 @@ async function muatRiwayat(){
           <div>
             <div style="font-weight:600;font-size:13.5px;">Transaksi #${t.ID}</div>
             <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">${new Date(t.Tanggal).toLocaleString('id-ID')} · ${esc(t.Kasir)}</div>
+            ${Number(t.Sisa)>0 ? `<div style="margin-top:6px;"><span class="stok-pill menipis">Piutang ${rupiah(t.Sisa)} · ${esc(t.NamaPelanggan)}</span></div>` : ''}
           </div>
           <div class="mono" style="font-weight:700;color:var(--primary);">${rupiah(t.TotalBayar)}</div>
         </div>
@@ -1035,6 +1381,9 @@ function fmtTanggalNota(iso){
 }
 
 function notaHtml(n, ulang){
+  const kredit = !!n.kredit;
+  const sisa = Number(n.sisa)||0;
+  const pelunasan = n.pelunasan || [];
   return `<div class="nota">
     <div class="c b big">${esc(TOKO.nama)}</div>
     ${TOKO.alamat?`<div class="c">${esc(TOKO.alamat)}</div>`:''}
@@ -1043,14 +1392,19 @@ function notaHtml(n, ulang){
     <div class="r"><span>No</span><span>#${n.id}</span></div>
     <div class="r"><span>Tanggal</span><span>${fmtTanggalNota(n.tanggal)}</span></div>
     <div class="r"><span>Kasir</span><span>${esc(n.kasir)}</span></div>
+    ${n.pelanggan?`<div class="r"><span>Pelanggan</span><span>${esc(n.pelanggan)}</span></div>`:''}
     <hr>
     ${n.items.map(i=>`<div class="it"><div>${esc(i.nama)}</div><div class="r"><span>${i.qty} x ${rupiah(i.harga)}</span><span>${rupiah(i.subtotal)}</span></div></div>`).join('')}
     <hr>
     <div class="r b big"><span>TOTAL</span><span>${rupiah(n.total)}</span></div>
     <div class="r"><span>Bayar</span><span>${rupiah(n.bayar)}</span></div>
-    <div class="r"><span>Kembali</span><span>${rupiah(n.kembalian)}</span></div>
+    ${pelunasan.map(x=>`<div class="r"><span>Pelunasan ${new Date(x.tanggal).toLocaleDateString('id-ID')}</span><span>${rupiah(x.jumlah)}</span></div>`).join('')}
+    ${kredit
+      ? (sisa>0 ? `<div class="r b big"><span>SISA PIUTANG</span><span>${rupiah(sisa)}</span></div>` : '')
+      : `<div class="r"><span>Kembali</span><span>${rupiah(n.kembalian)}</span></div>`}
     <hr>
     <div class="c">${esc(TOKO.footer)}</div>
+    ${kredit ? `<div class="c b" style="margin-top:6px;">${sisa>0 ? '*** BELUM LUNAS ***' : '*** LUNAS ***'}</div>` : ''}
     ${ulang?'<div class="c" style="margin-top:6px;">*** SALINAN NOTA ***</div>':''}
   </div>`;
 }
@@ -1064,13 +1418,16 @@ function cetakNota(n, ulang){
 
 function openNotaSheet(n, mode){
   const ulang = (mode==='ulang');
+  const barisHasil = ulang ? '' : (n.kredit
+    ? `<div class="pay-row kembalian"><span>Sisa piutang${n.pelanggan?' · '+esc(n.pelanggan):''}</span><span class="val mono">${rupiah(n.sisa)}</span></div>`
+    : `<div class="pay-row kembalian"><span>Kembalian</span><span class="val mono">${rupiah(n.kembalian)}</span></div>`);
   el('sheet-root').innerHTML = `
     <div class="overlay" id="nota-overlay">
       <div class="sheet">
         <button class="close-sheet" id="close-nota">✕</button>
         <div class="sheet-handle"></div>
         <h2>${ulang ? 'Nota #'+n.id : 'Transaksi Berhasil'}</h2>
-        ${ulang ? '' : `<div class="pay-row kembalian"><span>Kembalian</span><span class="val mono">${rupiah(n.kembalian)}</span></div>`}
+        ${barisHasil}
         ${notaHtml(n, ulang)}
         <button class="btn-primary" id="print-nota-btn">🖨 Cetak Nota</button>
         <button class="btn-secondary" id="done-nota-btn">${ulang ? 'Tutup' : 'Transaksi Baru'}</button>
